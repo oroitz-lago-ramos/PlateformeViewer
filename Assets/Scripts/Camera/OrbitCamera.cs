@@ -24,7 +24,7 @@ public class OrbitCamera : MonoBehaviour
     [Header("Zoom")]
     public float zoomSpeed = 5f;
     public float minZoom = 3f;
-    public float maxZoom = 60f;
+    public float maxZoom = 150f;
     public float defaultZoom = 20f;
 
     [Header("Pan")]
@@ -149,4 +149,12 @@ public class OrbitCamera : MonoBehaviour
         _targetYaw      = startYaw;
         _targetPitch    = startPitch;
     }
+
+    // ----------------------------------------------------------- web settings
+
+    /// <summary>Called from the web client via SendMessage.</summary>
+    public void SetOrbitSpeed(float v)  { orbitSpeed  = Mathf.Max(0.1f, v); }
+    public void SetPanSpeed(float v)    { panSpeed    = Mathf.Max(0.01f, v); }
+    public void SetZoomSpeed(float v)   { zoomSpeed   = Mathf.Max(0.1f, v); }
+    public void SetSmoothTime(float v)  { smoothTime  = Mathf.Clamp(v, 0.01f, 0.3f); }
 }

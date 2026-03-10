@@ -234,7 +234,7 @@ MonoBehaviour:
   startPitch: 35
   zoomSpeed: 5
   minZoom: 3
-  maxZoom: 60
+  maxZoom: 180
   defaultZoom: 20
   panSpeed: 0.3
   smoothTime: 0.08
