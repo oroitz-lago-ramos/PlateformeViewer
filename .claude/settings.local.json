@@ -6,7 +6,9 @@
       "Bash(rm -f components/Footer.tsx components/NameModal.tsx components/VideoPlayer.tsx)",
       "Bash(rm -rf components/CameraRotation components/InteractionPrompt components/Webrtc components/features components/ui components/UnityMap components/UnitySettings)",
       "Bash(rm -f components/BBB.tsx components/ConferenceIframe.tsx components/CursorHelp.tsx components/FullscreenButton.tsx components/GameModal.tsx components/LibraryDeskModal.tsx components/MediaModal.tsx components/NewsStandModal.tsx components/ProjectSelectionModal.tsx components/SignModal.tsx components/SkinSelectionOverlay.tsx components/TVModal.tsx components/index.ts)",
-      "Bash(rm -f hooks/index.ts hooks/types.ts hooks/useConferenceCursor.ts hooks/useModalCursor.ts hooks/useUnityBBB.ts hooks/useUnityConference.ts hooks/useUnityFullscreen.ts hooks/useUnityGame.ts hooks/useUnityInitialFocus.ts hooks/useUnityInteraction.ts hooks/useUnityLibraryDesk.ts hooks/useUnityMedia.ts hooks/useUnityMobile.ts hooks/useUnityNewsStand.ts hooks/useUnityProjectSelection.ts hooks/useUnityProximityCharacters.ts hooks/useUnitySign.ts hooks/useUnitySkinSelection.ts hooks/useUnityTV.ts hooks/useUserSettings.ts)"
+      "Bash(rm -f hooks/index.ts hooks/types.ts hooks/useConferenceCursor.ts hooks/useModalCursor.ts hooks/useUnityBBB.ts hooks/useUnityConference.ts hooks/useUnityFullscreen.ts hooks/useUnityGame.ts hooks/useUnityInitialFocus.ts hooks/useUnityInteraction.ts hooks/useUnityLibraryDesk.ts hooks/useUnityMedia.ts hooks/useUnityMobile.ts hooks/useUnityNewsStand.ts hooks/useUnityProjectSelection.ts hooks/useUnityProximityCharacters.ts hooks/useUnitySign.ts hooks/useUnitySkinSelection.ts hooks/useUnityTV.ts hooks/useUserSettings.ts)",
+      "Bash(find e:/TOSqve/ProjetsLaPlateforme/gits/Year_3/PlateformeViewer/WebClient -name PV_Logo*)",
+      "Bash(xargs grep:*)"
     ]
   }
 }

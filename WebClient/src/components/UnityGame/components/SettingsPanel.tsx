@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { GO, METHOD } from '../../../unity.config';
 
 // ── types ──────────────────────────────────────────────────────────────────
 
@@ -16,13 +17,11 @@ interface Setting {
 
 // ── config ─────────────────────────────────────────────────────────────────
 
-const CAMERA_OBJECT = 'Main Camera';
-
 const SETTINGS: Setting[] = [
-    { label: 'Orbit speed',  method: 'SetOrbitSpeed',  min: 1,    max: 15,  step: 0.5,  default: 5,    format: v => v.toFixed(1) },
-    { label: 'Pan speed',    method: 'SetPanSpeed',    min: 0.05, max: 1.5, step: 0.05, default: 0.3,  format: v => v.toFixed(2) },
-    { label: 'Zoom speed',   method: 'SetZoomSpeed',   min: 1,    max: 15,  step: 0.5,  default: 5,    format: v => v.toFixed(1) },
-    { label: 'Smoothing',    method: 'SetSmoothTime',  min: 0.01, max: 0.3, step: 0.01, default: 0.08, format: v => v.toFixed(2) },
+    { label: 'Orbit speed',  method: METHOD.SET_ORBIT_SPEED,  min: 1,    max: 15,  step: 0.5,  default: 5,    format: v => v.toFixed(1) },
+    { label: 'Pan speed',    method: METHOD.SET_PAN_SPEED,    min: 0.05, max: 1.5, step: 0.05, default: 0.3,  format: v => v.toFixed(2) },
+    { label: 'Zoom speed',   method: METHOD.SET_ZOOM_SPEED,   min: 1,    max: 15,  step: 0.5,  default: 5,    format: v => v.toFixed(1) },
+    { label: 'Smoothing',    method: METHOD.SET_SMOOTH_TIME,  min: 0.01, max: 0.3, step: 0.01, default: 0.08, format: v => v.toFixed(2) },
 ];
 
 // ── icons ──────────────────────────────────────────────────────────────────
@@ -61,13 +60,13 @@ export function SettingsPanel({ sendMessage }: Props) {
 
     const handleChange = (setting: Setting, raw: number) => {
         setValues(v => ({ ...v, [setting.method]: raw }));
-        sendMessage(CAMERA_OBJECT, setting.method, raw);
+        sendMessage(GO.CAMERA, setting.method, raw);
     };
 
     const handleReset = () => {
         const defaults = Object.fromEntries(SETTINGS.map(s => [s.method, s.default]));
         setValues(defaults);
-        SETTINGS.forEach(s => sendMessage(CAMERA_OBJECT, s.method, s.default));
+        SETTINGS.forEach(s => sendMessage(GO.CAMERA, s.method, s.default));
     };
 
     return (
