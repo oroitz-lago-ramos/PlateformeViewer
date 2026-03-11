@@ -23,12 +23,11 @@ public class RoomClickHandler : MonoBehaviour
             Ray ray = mainCamera.ScreenPointToRay(Input.mousePosition);
             if (Physics.Raycast(ray, out RaycastHit hit))
             {
-                // Cherche dans les mappings si ce GameObject correspond à une salle
                 RoomData room = GetRoomFromHit(hit.collider.gameObject);
                 if (room != null)
                 {
-                    Debug.Log($"Salle cliquée : {room.roomName} — Statut : {room.status}");
-                    // on gére  l'affichage le panneau UI ici 
+                    Debug.Log($"Salle cliquée : {room.name} — Statut : {room.status}");
+                    // on gère l'affichage du panneau UI ici
                 }
             }
         }
