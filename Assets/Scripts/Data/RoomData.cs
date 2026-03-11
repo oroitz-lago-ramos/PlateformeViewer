@@ -2,14 +2,16 @@ using UnityEngine;
 using System;
 using System.Collections.Generic;
 
-[CreateAssetMenu(fileName = "RoomData", menuName = "PlatformeViewer/Room")]
 public class RoomData : ScriptableObject
 {
     [Header("Infos de la salle")]
-    public string code;
-    public string roomName;
-    public int capacity;
+    public string id;
+    public string name;
     public string type;
+    public int capacity;
+    public string building;
+    public string floor;
+    public string category;
     public string status;
 
     [Header("Événements")]
