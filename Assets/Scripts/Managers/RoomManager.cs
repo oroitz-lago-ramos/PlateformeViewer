@@ -1,87 +1,116 @@
 using UnityEngine;
+using UnityEngine.Networking;
 using System.Collections;
 using System.Collections.Generic;
-using UnityEngine.Networking;
 
 public class RoomManager : MonoBehaviour
 {
-    [Header("Configuration API")]
+    [Header("Configuration")]
     public string apiBaseUrl = "https://localhost/api/v1";
+    public bool useLocalFallback = true;
+    public float refreshInterval = 30f;
 
-    [Header("Salles")]
+    [Header("Salles chargées (lecture seule)")]
     public List<RoomData> rooms = new List<RoomData>();
 
-    [Header("Mise à jour")]
-    public bool autoRefresh = true;
-    public float refreshInterval = 30f;
+    public static event System.Action OnRoomsLoaded;
+    public static event System.Action<RoomData> OnRoomUpdated;
 
     void Start()
     {
-        if (autoRefresh)
-            InvokeRepeating(nameof(FetchAllRooms), 0f, refreshInterval);
+        StartCoroutine(LoadRooms());
     }
 
-    public void FetchAllRooms()
+    IEnumerator LoadRooms()
     {
-        foreach (RoomData room in rooms)
-            StartCoroutine(FetchRoom(room));
-    }
-
-    private IEnumerator FetchRoom(RoomData room)
-    {
-        string url = $"{apiBaseUrl}/rooms/{room.code}";
+        string url = useLocalFallback
+            ? "file://" + Application.streamingAssetsPath + "/rooms.json"
+            : apiBaseUrl + "/rooms";
 
         using UnityWebRequest request = UnityWebRequest.Get(url);
         yield return request.SendWebRequest();
 
         if (request.result != UnityWebRequest.Result.Success)
         {
-            Debug.LogWarning($"[RoomManager] Erreur pour {room.code} : {request.error}");
+            Debug.LogError($"Erreur chargement salles : {request.error}");
             yield break;
         }
 
-        try
+        RoomJsonRoot root = JsonUtility.FromJson<RoomJsonRoot>(request.downloadHandler.text);
+
+        if (root == null || root.rooms == null)
         {
-            RoomApiResponse response = JsonUtility.FromJson<RoomApiResponse>(request.downloadHandler.text);
-            ApplyData(room, response);
+            Debug.LogError("JSON invalide ou vide !");
+            yield break;
         }
-        catch
+
+        rooms.Clear();
+        foreach (var data in root.rooms)
         {
-            Debug.LogWarning($"[RoomManager] JSON invalide pour {room.code}");
+            RoomData room = ScriptableObject.CreateInstance<RoomData>();
+            room.id = data.id;
+            room.name = data.name;
+            room.capacity = data.capacity;
+            room.type = data.type;
+            room.building = data.building;
+            room.floor = data.floor;
+            room.category = data.category;
+            room.status = "unknown";
+            rooms.Add(room);
         }
+
+        Debug.Log($"{rooms.Count} salles chargées !");
+        OnRoomsLoaded?.Invoke();
+
+        InvokeRepeating(nameof(RefreshAllRooms), refreshInterval, refreshInterval);
     }
 
-    private void ApplyData(RoomData room, RoomApiResponse data)
+    void RefreshAllRooms()
     {
-        room.roomName  = data.room.name;
-        room.capacity  = data.room.capacity;
-        room.type      = data.room.type;
-        room.status    = data.room.status;
+        foreach (var room in rooms)
+            StartCoroutine(FetchRoomStatus(room));
+    }
 
-        room.currentEvent = data.room.current_event;
-        room.nextEvent    = data.room.next_event;
-        room.scheduleToday = new List<EventData>(data.room.schedule_today);
+    IEnumerator FetchRoomStatus(RoomData room)
+    {
+        if (useLocalFallback) yield break;
 
-        Debug.Log($"[RoomManager] Salle {room.code} mise à jour : {room.status}");
+        using UnityWebRequest request = UnityWebRequest.Get($"{apiBaseUrl}/rooms/{room.id}");
+        yield return request.SendWebRequest();
+
+        if (request.result != UnityWebRequest.Result.Success)
+        {
+            Debug.LogWarning($"Erreur mise à jour {room.name} : {request.error}");
+            yield break;
+        }
+
+        JsonUtility.FromJsonOverwrite(request.downloadHandler.text, room);
+        OnRoomUpdated?.Invoke(room);
+        Debug.Log($"Salle {room.name} mise à jour : {room.status}");
+    }
+
+    public RoomData GetRoom(string id)
+    {
+        return rooms.Find(r => r.id == id);
     }
 }
 
 [System.Serializable]
-public class RoomApiResponse
+public class RoomJsonRoot
 {
-    public string timestamp;
-    public RoomApiData room;
+    public string exportDate;
+    public int totalRooms;
+    public RoomJsonItem[] rooms;
 }
 
 [System.Serializable]
-public class RoomApiData
+public class RoomJsonItem
 {
-    public string code;
+    public string id;
     public string name;
-    public int capacity;
     public string type;
-    public string status;
-    public EventData current_event;
-    public EventData next_event;
-    public EventData[] schedule_today;
+    public int capacity;
+    public string building;
+    public string floor;
+    public string category;
 }
