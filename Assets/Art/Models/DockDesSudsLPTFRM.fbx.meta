@@ -3,7 +3,57 @@ guid: 8543640b5ee80054ca9f18721fa6b30f
 ModelImporter:
   serializedVersion: 24200
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: BluePath
+    second: {fileID: 2100000, guid: 29658202506b0dc4d82054c4b6a99248, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: GrayFloor
+    second: {fileID: 2100000, guid: f3e98db9d12cab842b4e90d1d4669841, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: GrayWalls
+    second: {fileID: 2100000, guid: 949ad216a283eba46bd44e664c8b9d61, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: GreenPath
+    second: {fileID: 2100000, guid: 1b3ae94ff5f13fa4fa0284f4a509db1a, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: PH.002
+    second: {fileID: 2100000, guid: e8f2b3d94a6ea9948a1e881f454f2356, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: PH.006
+    second: {fileID: 2100000, guid: 3334bffff2e627d468b103b070d3a215, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: RedPath
+    second: {fileID: 2100000, guid: 09bf008d95155384aad790bf389fe8cf, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Side Panel.002
+    second: {fileID: 2100000, guid: 33a6804edd6eff94db7e71385ff3cb6d, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Side Panel.006
+    second: {fileID: 2100000, guid: 5bd1933619111bd46ac85293250282be, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: YellowPath
+    second: {fileID: 2100000, guid: 1cf77cda68814bf48b186ec17e8576c7, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0
