@@ -1,123 +1,191 @@
-using System.Collections;
 using UnityEngine;
-using UnityEngine.SceneManagement;
+using System.Collections.Generic;
 
-/// <summary>
-/// Loads a building scene additively on top of MainScene.
-/// Place this on a persistent GameObject in MainScene.
-///
-/// Scene hierarchy at runtime:
-///   MainScene        ← camera, lights, UI, managers
-///   LaPlateformeModel (loaded additively) ← 3D building only
-/// </summary>
-public class SceneLoader : MonoBehaviour
+public class RoomClickHandler : MonoBehaviour
 {
-    [Tooltip("Exact scene name to load (must be added to Build Settings)")]
-    public string buildingSceneName = "LaPlateformeModel";
+    [Header("Références")]
+    public Camera mainCamera;
 
-    [Tooltip("Optional: camera to focus on the building after load")]
-    public OrbitCamera orbitCamera;
+    [Header("Highlight")]
+    [Tooltip("Couleur appliquée sur le mesh de la salle survolée/cliquée")]
+    public Color highlightColor = new Color(0.2f, 0.6f, 1f, 0.5f);
 
-    public bool IsLoaded { get; private set; }
+    public static event System.Action<RoomData> OnRoomClicked;
 
-    // ----------------------------------------------------------------- unity
+    private readonly Dictionary<GameObject, RoomData> _roomMap = new();
+
+    // Suivi du dernier highlight
+    private GameObject _lastHighlighted;
+    private readonly Dictionary<Renderer, Color> _originalColors = new();
+
+    // ----------------------------------------------------------------- Unity
 
     void Start()
     {
-        LoadBuilding();
+        if (mainCamera == null)
+            mainCamera = Camera.main;
+
+        // S'abonner aux événements du RoomManager
+        RoomManager.OnRoomsLoaded += BuildRoomMap;
+        RoomManager.OnRoomUpdated += _ => { }; // hook disponible
     }
 
-    // ----------------------------------------------------------------- public
-
-    public void LoadBuilding()
+    void OnDestroy()
     {
-        if (IsLoaded) return;
-        StartCoroutine(LoadAdditiveCoroutine(buildingSceneName));
+        RoomManager.OnRoomsLoaded -= BuildRoomMap;
     }
 
-    public void UnloadBuilding()
+    void Update()
     {
-        if (!IsLoaded) return;
-        StartCoroutine(UnloadCoroutine(buildingSceneName));
+        if (Input.GetMouseButtonDown(0))
+            HandleClick();
     }
 
-    /// <summary>
-    /// Swap to a different building scene at runtime.
-    /// Unloads the current one first, then loads the new one.
-    /// </summary>
-    public void SwapBuilding(string newSceneName)
-    {
-        StartCoroutine(SwapCoroutine(newSceneName));
-    }
+    // ----------------------------------------------------------------- Clic
 
-    // ----------------------------------------------------------------- private
-
-    private IEnumerator LoadAdditiveCoroutine(string sceneName)
+    void HandleClick()
     {
-        // Avoid double-loading
-        if (SceneManager.GetSceneByName(sceneName).isLoaded)
+        Ray ray = mainCamera.ScreenPointToRay(Input.mousePosition);
+
+        if (!Physics.Raycast(ray, out RaycastHit hit))
         {
-            IsLoaded = true;
-            yield break;
+            ClearHighlight();
+            return;
         }
 
-        AsyncOperation op = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Additive);
-        if (op == null)
+        GameObject root = FindRoomRoot(hit.collider.gameObject);
+
+        if (root == null || !_roomMap.TryGetValue(root, out RoomData room))
         {
-            Debug.LogError($"[SceneLoader] Scene '{sceneName}' not found. Add it to Build Settings.");
-            yield break;
+            ClearHighlight();
+            return;
         }
 
-        yield return op;
-
-        IsLoaded = true;
-        Debug.Log($"[SceneLoader] Loaded '{sceneName}' additively.");
-
-        CenterCameraOnBuilding(sceneName);
+        HighlightRoom(root);
+        Debug.Log($"[RoomClick] {room.name} | statut : {room.status} | capacité : {room.capacity}");
+        OnRoomClicked?.Invoke(room);
     }
 
-    private IEnumerator UnloadCoroutine(string sceneName)
-    {
-        if (!SceneManager.GetSceneByName(sceneName).isLoaded) yield break;
-
-        yield return SceneManager.UnloadSceneAsync(sceneName);
-        IsLoaded = false;
-        Debug.Log($"[SceneLoader] Unloaded '{sceneName}'.");
-    }
-
-    private IEnumerator SwapCoroutine(string newSceneName)
-    {
-        yield return UnloadCoroutine(buildingSceneName);
-        buildingSceneName = newSceneName;
-        yield return LoadAdditiveCoroutine(newSceneName);
-    }
+    // ----------------------------------------------------------------- Mapping automatique
 
     /// <summary>
-    /// After load, find the root objects of the building scene and compute
-    /// their combined bounds so the orbit camera can frame them properly.
+    /// Appelé par RoomManager.OnRoomsLoaded.
+    /// Parcourt tous les GameObjects actifs et les associe aux RoomData par nom.
     /// </summary>
-    private void CenterCameraOnBuilding(string sceneName)
+    void BuildRoomMap()
     {
-        if (orbitCamera == null) return;
+        _roomMap.Clear();
 
-        Scene scene = SceneManager.GetSceneByName(sceneName);
-        Bounds bounds = new Bounds(Vector3.zero, Vector3.zero);
-        bool hasBounds = false;
+        // Récupère tous les GameObjects de la scène (y compris la scène additive)
+        GameObject[] allObjects = FindObjectsByType<GameObject>(FindObjectsSortMode.None);
 
-        foreach (GameObject root in scene.GetRootGameObjects())
+        RoomManager mgr = FindFirstObjectByType<RoomManager>();
+        if (mgr == null) return;
+
+        foreach (RoomData room in mgr.rooms)
         {
-            foreach (Renderer r in root.GetComponentsInChildren<Renderer>())
+            foreach (GameObject go in allObjects)
             {
-                if (!hasBounds) { bounds = r.bounds; hasBounds = true; }
-                else              bounds.Encapsulate(r.bounds);
+                if (NamesMatch(go.name, room.name) && !_roomMap.ContainsKey(go))
+                {
+                    _roomMap[go] = room;
+                    break;
+                }
             }
         }
 
-        if (!hasBounds) return;
+        Debug.Log($"[RoomClickHandler] {_roomMap.Count} salles mappées sur {mgr.rooms.Count} chargées.");
+    }
 
-        // Focus the orbit camera on the center of the building,
-        // at a distance that fits the whole thing in view
-        float fitDistance = bounds.extents.magnitude * 2.5f;
-        orbitCamera.FocusOn(bounds.center, fitDistance);
+    static bool NamesMatch(string goName, string roomName)
+    {
+        if (string.IsNullOrEmpty(goName) || string.IsNullOrEmpty(roomName))
+            return false;
+
+        string a = Normalize(goName);
+        string b = Normalize(roomName);
+        return a == b || a.Contains(b) || b.Contains(a);
+    }
+
+    static string Normalize(string s)
+        => s.ToLowerInvariant()
+             .Replace("-", "")
+             .Replace("_", "")
+             .Replace(" ", "");
+
+    // ----------------------------------------------------------------- Hiérarchie
+
+    /// <summary>
+    /// Remonte la hiérarchie depuis l'objet touché jusqu'à trouver
+    /// un GameObject référencé dans _roomMap.
+    /// </summary>
+    GameObject FindRoomRoot(GameObject hit)
+    {
+        Transform t = hit.transform;
+        while (t != null)
+        {
+            if (_roomMap.ContainsKey(t.gameObject))
+                return t.gameObject;
+            t = t.parent;
+        }
+        return null;
+    }
+
+    // ----------------------------------------------------------------- Highlight
+
+    void HighlightRoom(GameObject root)
+    {
+        if (_lastHighlighted == root) return;
+
+        ClearHighlight();
+        _lastHighlighted = root;
+
+        foreach (Renderer r in root.GetComponentsInChildren<Renderer>())
+        {
+            foreach (Material mat in r.materials)
+            {
+                if (!_originalColors.ContainsKey(r))
+                    _originalColors[r] = mat.HasProperty("_BaseColor")
+                        ? mat.GetColor("_BaseColor")
+                        : mat.color;
+
+                if (mat.HasProperty("_BaseColor"))
+                    mat.SetColor("_BaseColor", highlightColor);
+                else
+                    mat.color = highlightColor;
+            }
+        }
+    }
+
+    void ClearHighlight()
+    {
+        if (_lastHighlighted == null) return;
+
+        foreach (Renderer r in _lastHighlighted.GetComponentsInChildren<Renderer>())
+        {
+            if (_originalColors.TryGetValue(r, out Color original))
+            {
+                foreach (Material mat in r.materials)
+                {
+                    if (mat.HasProperty("_BaseColor"))
+                        mat.SetColor("_BaseColor", original);
+                    else
+                        mat.color = original;
+                }
+            }
+        }
+
+        _originalColors.Clear();
+        _lastHighlighted = null;
+    }
+
+    // ----------------------------------------------------------------- Debug
+
+    /// <summary>Appelle ça depuis l'Inspector (bouton contextuel) pour voir le mapping.</summary>
+    [ContextMenu("Log Room Map")]
+    void LogRoomMap()
+    {
+        foreach (var kv in _roomMap)
+            Debug.Log($"  {kv.Key.name}  →  {kv.Value.name} ({kv.Value.status})");
     }
 }
