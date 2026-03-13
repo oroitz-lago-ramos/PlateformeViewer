@@ -65,6 +65,13 @@ function UnityGame() {
         return () => clearTimeout(t);
     }, [isLoaded]);
 
+    // Envoie le chemin StreamingAssets à Unity dès que le build est chargé
+    useEffect(() => {
+        if (!isLoaded) return;
+        const path = window.location.origin + '/UnityBuild/StreamingAssets';
+        sendMessage('RoomManager', 'SetStreamingAssetsPath', path);
+    }, [isLoaded, sendMessage]);
+
     // Expose bridge utilities on window for debugging
     if (typeof window !== 'undefined') {
         (window as any).__unity = { sendMessage, addEventListener, removeEventListener };
