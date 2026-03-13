@@ -6,7 +6,7 @@ public class RoomData : ScriptableObject
 {
     [Header("Infos de la salle")]
     public string id;
-    public string name;
+    public new string name;
     public string type;
     public int capacity;
     public string building;
