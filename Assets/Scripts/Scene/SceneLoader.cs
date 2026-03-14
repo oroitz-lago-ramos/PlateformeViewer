@@ -20,6 +20,9 @@ public class SceneLoader : MonoBehaviour
 
     public bool IsLoaded { get; private set; }
 
+    /// <summary>Fired after the building scene finishes loading additively.</summary>
+    public static event System.Action OnBuildingLoaded;
+
     // ----------------------------------------------------------------- unity
 
     void Start()
@@ -74,6 +77,7 @@ public class SceneLoader : MonoBehaviour
         Debug.Log($"[SceneLoader] Loaded '{sceneName}' additively.");
 
         CenterCameraOnBuilding(sceneName);
+        OnBuildingLoaded?.Invoke();
     }
 
     private IEnumerator UnloadCoroutine(string sceneName)

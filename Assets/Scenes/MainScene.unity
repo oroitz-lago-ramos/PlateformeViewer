@@ -132,6 +132,7 @@ GameObject:
   - component: {fileID: 586720314}
   - component: {fileID: 586720318}
   - component: {fileID: 586720317}
+  - component: {fileID: 586720319}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -282,6 +283,23 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
+--- !u!114 &586720319
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 586720313}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f60112c19b440f64d8272e26cd90afd9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RoomClickHandler
+  mainCamera: {fileID: 0}
+  outlineColor: {r: 0.2, g: 0.6, b: 1, a: 1}
+  outlineWidth: 5
+  outlineMode: 0
+  debugRaycast: 1
 --- !u!1 &609182824
 GameObject:
   m_ObjectHideFlags: 0
@@ -584,8 +602,8 @@ MonoBehaviour:
   apiBaseUrl: https://localhost/api/v1
   useLocalFallback: 1
   refreshInterval: 30
-  rooms:
-  - {fileID: 11400000, guid: 6263e5d337d18d6418cf7076d61f212f, type: 2}
+  autoLoadOnStart: 1
+  rooms: []
 --- !u!4 &1627807464
 Transform:
   m_ObjectHideFlags: 0

@@ -34,6 +34,13 @@ public class AddCollidersToContainers : EditorWindow
             // Ajoute RoomIdentifier si pas déjà présent
             if (child.GetComponent<RoomIdentifier>() == null)
                 child.gameObject.AddComponent<RoomIdentifier>();
+
+            // Ajoute Outline si pas déjà présent (désactivé par défaut)
+            if (child.GetComponent<Outline>() == null)
+            {
+                Outline outline = child.gameObject.AddComponent<Outline>();
+                outline.enabled = false;
+            }
         }
 
         Debug.Log($"{count} colliders ajoutés !");

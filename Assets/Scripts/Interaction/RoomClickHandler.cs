@@ -6,17 +6,23 @@ public class RoomClickHandler : MonoBehaviour
     [Header("Références")]
     public Camera mainCamera;
 
-    [Header("Highlight")]
-    [Tooltip("Couleur appliquée sur le mesh de la salle survolée/cliquée")]
-    public Color highlightColor = new Color(0.2f, 0.6f, 1f, 0.5f);
+    [Header("Outline Hover")]
+    public Color outlineColor = new Color(0.2f, 0.6f, 1f, 1f);
+    [Range(0f, 10f)]
+    public float outlineWidth = 4f;
+    public Outline.Mode outlineMode = Outline.Mode.OutlineAll;
+
+    [Header("Debug")]
+    public bool debugRaycast = true;
 
     public static event System.Action<RoomData> OnRoomClicked;
 
     private readonly Dictionary<GameObject, RoomData> _roomMap = new();
 
-    // Suivi du dernier highlight
-    private GameObject _lastHighlighted;
-    private readonly Dictionary<Renderer, Color> _originalColors = new();
+    private GameObject _hoveredRoom;
+
+    private Vector2 _mouseDownPos;
+    private const float DragThresholdPx = 5f;
 
     // ----------------------------------------------------------------- Unity
 
@@ -25,73 +31,122 @@ public class RoomClickHandler : MonoBehaviour
         if (mainCamera == null)
             mainCamera = Camera.main;
 
-        // S'abonner aux événements du RoomManager
-        RoomManager.OnRoomsLoaded += BuildRoomMap;
-        RoomManager.OnRoomUpdated += _ => { }; // hook disponible
+        RoomManager.OnRoomsLoaded    += BuildRoomMap;
+        SceneLoader.OnBuildingLoaded += BuildRoomMap;
+
+        // Try building the map immediately in case both are already ready
+        BuildRoomMap();
     }
 
     void OnDestroy()
     {
-        RoomManager.OnRoomsLoaded -= BuildRoomMap;
+        RoomManager.OnRoomsLoaded    -= BuildRoomMap;
+        SceneLoader.OnBuildingLoaded -= BuildRoomMap;
     }
 
-    void Update()
-    {
-        if (Input.GetMouseButtonDown(0))
-            HandleClick();
-    }
-
-    // ----------------------------------------------------------------- Clic
-
-    void HandleClick()
+    // Hover: raycast every fixed step
+    void FixedUpdate()
     {
         Ray ray = mainCamera.ScreenPointToRay(Input.mousePosition);
 
-        if (!Physics.Raycast(ray, out RaycastHit hit))
+        if (Physics.Raycast(ray, out RaycastHit hit))
         {
-            ClearHighlight();
-            return;
+            if (debugRaycast)
+                Debug.Log($"[Raycast] hit: {hit.collider.gameObject.name}");
+
+            // Use RoomIdentifier to find the container root (works even when room map is empty)
+            GameObject root = FindRoomIdentifierRoot(hit.collider.gameObject);
+
+            if (debugRaycast && root == null)
+                Debug.Log($"[Raycast] no RoomIdentifier found from {hit.collider.gameObject.name}");
+
+            SetHover(root);
+        }
+        else
+        {
+            SetHover(null);
+        }
+    }
+
+    // Click: detected in Update so no input is missed
+    void Update()
+    {
+        if (Input.GetMouseButtonDown(0))
+            _mouseDownPos = Input.mousePosition;
+
+        if (Input.GetMouseButtonUp(0))
+        {
+            // Ignore if the mouse moved more than the drag threshold (camera orbit)
+            Vector2 delta = (Vector2)Input.mousePosition - _mouseDownPos;
+            if (delta.sqrMagnitude > DragThresholdPx * DragThresholdPx) return;
+
+            if (_hoveredRoom == null)
+            {
+                if (debugRaycast) Debug.Log("[RoomClick] click but no hovered room");
+                return;
+            }
+
+            if (_roomMap.TryGetValue(_hoveredRoom, out RoomData room))
+            {
+                Debug.Log($"[RoomClick] {room.name} | statut : {room.status} | capacité : {room.capacity}");
+                WebBridge.SendRoomSelected(RoomManager.SerializeRoom(room));
+                OnRoomClicked?.Invoke(room);
+            }
+            else
+            {
+                RoomIdentifier rid = _hoveredRoom.GetComponent<RoomIdentifier>();
+                Debug.Log($"[RoomClick] container: {_hoveredRoom.name} | roomName: {(rid != null ? rid.roomName : "?")} (map not loaded)");
+            }
+        }
+    }
+
+    // ----------------------------------------------------------------- Hover
+
+    void SetHover(GameObject root)
+    {
+        if (_hoveredRoom == root) return;
+
+        // Disable outline on previous
+        if (_hoveredRoom != null)
+        {
+            Outline old = _hoveredRoom.GetComponent<Outline>();
+            if (old != null) old.enabled = false;
         }
 
-        GameObject root = FindRoomRoot(hit.collider.gameObject);
+        _hoveredRoom = root;
 
-        if (root == null || !_roomMap.TryGetValue(root, out RoomData room))
+        // Enable outline on new
+        if (_hoveredRoom != null)
         {
-            ClearHighlight();
-            return;
+            Outline outline = _hoveredRoom.GetComponent<Outline>();
+            if (outline != null)
+            {
+                outline.OutlineMode = outlineMode;
+                outline.OutlineColor = outlineColor;
+                outline.OutlineWidth = outlineWidth;
+                outline.enabled = true;
+            }
         }
-
-        HighlightRoom(root);
-        Debug.Log($"[RoomClick] {room.name} | statut : {room.status} | capacité : {room.capacity}");
-        OnRoomClicked?.Invoke(room);
     }
 
     // ----------------------------------------------------------------- Mapping automatique
 
-    /// <summary>
-    /// Appelé par RoomManager.OnRoomsLoaded.
-    /// Parcourt tous les GameObjects actifs et les associe aux RoomData par nom.
-    /// </summary>
     void BuildRoomMap()
     {
         _roomMap.Clear();
 
-        // Récupère tous les GameObjects de la scène (y compris la scène additive)
-        GameObject[] allObjects = FindObjectsByType<GameObject>(FindObjectsSortMode.None);
-
         RoomManager mgr = FindFirstObjectByType<RoomManager>();
-        if (mgr == null) return;
+        if (mgr == null || mgr.rooms.Count == 0) return;
 
-        foreach (RoomData room in mgr.rooms)
+        // Match by RoomIdentifier.roomName — more reliable than matching GameObject names
+        // which are generic (e.g. "SingleContainer17" vs room name "Bleu-17")
+        foreach (RoomIdentifier identifier in FindObjectsByType<RoomIdentifier>(FindObjectsSortMode.None))
         {
-            foreach (GameObject go in allObjects)
-            {
-                if (NamesMatch(go.name, room.name) && !_roomMap.ContainsKey(go))
-                {
-                    _roomMap[go] = room;
-                    break;
-                }
-            }
+            if (string.IsNullOrEmpty(identifier.roomName)) continue;
+
+            RoomData room = mgr.rooms.Find(r => NamesMatch(identifier.roomName, r.name));
+            if (room != null && !_roomMap.ContainsKey(identifier.gameObject))
+                _roomMap[identifier.gameObject] = room;
         }
 
         Debug.Log($"[RoomClickHandler] {_roomMap.Count} salles mappées sur {mgr.rooms.Count} chargées.");
@@ -115,73 +170,21 @@ public class RoomClickHandler : MonoBehaviour
 
     // ----------------------------------------------------------------- Hiérarchie
 
-    /// <summary>
-    /// Remonte la hiérarchie depuis l'objet touché jusqu'à trouver
-    /// un GameObject référencé dans _roomMap.
-    /// </summary>
-    GameObject FindRoomRoot(GameObject hit)
+    // Finds the nearest ancestor (or self) with a RoomIdentifier component
+    static GameObject FindRoomIdentifierRoot(GameObject hit)
     {
         Transform t = hit.transform;
         while (t != null)
         {
-            if (_roomMap.ContainsKey(t.gameObject))
+            if (t.GetComponent<RoomIdentifier>() != null)
                 return t.gameObject;
             t = t.parent;
         }
         return null;
     }
 
-    // ----------------------------------------------------------------- Highlight
-
-    void HighlightRoom(GameObject root)
-    {
-        if (_lastHighlighted == root) return;
-
-        ClearHighlight();
-        _lastHighlighted = root;
-
-        foreach (Renderer r in root.GetComponentsInChildren<Renderer>())
-        {
-            foreach (Material mat in r.materials)
-            {
-                if (!_originalColors.ContainsKey(r))
-                    _originalColors[r] = mat.HasProperty("_BaseColor")
-                        ? mat.GetColor("_BaseColor")
-                        : mat.color;
-
-                if (mat.HasProperty("_BaseColor"))
-                    mat.SetColor("_BaseColor", highlightColor);
-                else
-                    mat.color = highlightColor;
-            }
-        }
-    }
-
-    void ClearHighlight()
-    {
-        if (_lastHighlighted == null) return;
-
-        foreach (Renderer r in _lastHighlighted.GetComponentsInChildren<Renderer>())
-        {
-            if (_originalColors.TryGetValue(r, out Color original))
-            {
-                foreach (Material mat in r.materials)
-                {
-                    if (mat.HasProperty("_BaseColor"))
-                        mat.SetColor("_BaseColor", original);
-                    else
-                        mat.color = original;
-                }
-            }
-        }
-
-        _originalColors.Clear();
-        _lastHighlighted = null;
-    }
-
     // ----------------------------------------------------------------- Debug
 
-    /// <summary>Appelle ça depuis l'Inspector (bouton contextuel) pour voir le mapping.</summary>
     [ContextMenu("Log Room Map")]
     void LogRoomMap()
     {

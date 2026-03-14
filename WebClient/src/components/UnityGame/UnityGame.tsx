@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Unity, useUnityContext } from 'react-unity-webgl';
+import type { UnityRoomPayload } from '../../types/room';
+import { mapUnityRoom } from '../../types/room';
 import { LoadingScreen } from './components/LoadingScreen';
 import { ControlsHint } from './components/ControlsHint';
 import { SettingsPanel } from './components/SettingsPanel';
@@ -21,8 +23,6 @@ function UnityGame() {
         isLoaded,
         loadingProgression,
         sendMessage,
-        addEventListener,
-        removeEventListener,
     } = useUnityContext({
         loaderUrl: BASE_URL + BUILD_NAME + '.loader.js',
         dataUrl: BASE_URL + BUILD_NAME + '.data',
@@ -33,7 +33,7 @@ function UnityGame() {
     const [ready, setReady] = useState(false);
 
     // ── Room state ────────────────────────────────────────────────────────────
-    const { rooms, getSchedule } = useRoomData();
+    const { rooms, getSchedule, updateRoom } = useRoomData();
     const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
     const [dayOffset, setDayOffset] = useState(0);
 
@@ -50,14 +50,54 @@ function UnityGame() {
         setDayOffset(0);
     }, []);
 
-    // ── Unity event: room clicked in 3D view ──────────────────────────────────
+    // ── Close detail panel when the camera moves ─────────────────────────────
     useEffect(() => {
-        const handler = (roomId: unknown) => {
-            if (typeof roomId === 'string') handleSelectRoom(roomId);
+        if (!selectedRoomId || !ready) return;
+
+        const canvas = document.getElementById('unity-canvas');
+        if (!canvas) return;
+
+        let startX = 0;
+        let startY = 0;
+
+        const onMouseDown = (e: MouseEvent) => { startX = e.clientX; startY = e.clientY; };
+
+        const onMouseMove = (e: MouseEvent) => {
+            if (e.buttons === 0) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            if (dx * dx + dy * dy > 25) handleCloseDetail(); // > 5px drag
         };
-        addEventListener('OnRoomSelected', handler);
-        return () => removeEventListener('OnRoomSelected', handler);
-    }, [addEventListener, removeEventListener, handleSelectRoom]);
+
+        const onWheel = () => handleCloseDetail();
+
+        canvas.addEventListener('mousedown', onMouseDown);
+        canvas.addEventListener('mousemove', onMouseMove);
+        canvas.addEventListener('wheel', onWheel, { passive: true });
+        return () => {
+            canvas.removeEventListener('mousedown', onMouseDown);
+            canvas.removeEventListener('mousemove', onMouseMove);
+            canvas.removeEventListener('wheel', onWheel);
+        };
+    }, [selectedRoomId, ready, handleCloseDetail]);
+
+    // ── Unity event: room clicked in 3D view ─────────────────────────────────
+    // Unity dispatches a CustomEvent('unityRoomSelected') with the full room JSON
+    useEffect(() => {
+        const handler = (e: Event) => {
+            try {
+                const payload = JSON.parse((e as CustomEvent<string>).detail) as UnityRoomPayload;
+                const room = mapUnityRoom(payload);
+                // Update the room in state with fresh data, then select it
+                updateRoom(room);
+                handleSelectRoom(room.id);
+            } catch (err) {
+                console.error('[UnityGame] Failed to parse unityRoomSelected payload', err);
+            }
+        };
+        window.addEventListener('unityRoomSelected', handler);
+        return () => window.removeEventListener('unityRoomSelected', handler);
+    }, [handleSelectRoom]);
 
     useEffect(() => {
         if (!isLoaded) return;
@@ -72,9 +112,9 @@ function UnityGame() {
         sendMessage('RoomManager', 'SetStreamingAssetsPath', path);
     }, [isLoaded, sendMessage]);
 
-    // Expose bridge utilities on window for debugging
+    // Expose sendMessage on window for debugging
     if (typeof window !== 'undefined') {
-        (window as any).__unity = { sendMessage, addEventListener, removeEventListener };
+        (window as any).__unity = { sendMessage };
     }
 
     return (

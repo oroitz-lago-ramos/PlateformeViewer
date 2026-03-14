@@ -11,6 +11,10 @@ public class RoomManager : MonoBehaviour
     public bool useLocalFallback = true;
     public float refreshInterval = 30f;
 
+    [Header("Editor / Standalone")]
+    [Tooltip("Auto-load rooms.json at Start without waiting for React (editor & standalone testing)")]
+    public bool autoLoadOnStart = true;
+
     [Header("Salles chargées (lecture seule)")]
     public List<RoomData> rooms = new List<RoomData>();
 
@@ -19,37 +23,67 @@ public class RoomManager : MonoBehaviour
 
     private string _streamingAssetsUrl = "";
 
-    void Start() { } // Unity Web : on attend SetStreamingAssetsPath depuis React
+    void Start()
+    {
+#if !UNITY_WEBGL || UNITY_EDITOR
+        // Editor / standalone: load directly from disk — no need to wait for React
+        if (autoLoadOnStart)
+            StartCoroutine(LoadRoomsFromDisk(
+                System.IO.Path.Combine(Application.streamingAssetsPath, "rooms.json")));
+#endif
+    }
 
-    // Appelé par React via sendMessage après chargement
+    // Called by React via sendMessage once the WebGL build is mounted
     public void SetStreamingAssetsPath(string path)
     {
-        _streamingAssetsUrl = path;
+        _streamingAssetsUrl = path.TrimEnd('/');
         string url = useLocalFallback
             ? _streamingAssetsUrl + "/rooms.json"
             : apiBaseUrl + "/rooms";
 
-        Debug.Log("URL tentée : " + url);
-        StartCoroutine(LoadRooms(url));
+        Debug.Log("[RoomManager] URL : " + url);
+        StartCoroutine(LoadRoomsFromWeb(url));
     }
 
-    IEnumerator LoadRooms(string url)
+    // ── Loaders ───────────────────────────────────────────────────────────────
+
+#if !UNITY_WEBGL || UNITY_EDITOR
+    IEnumerator LoadRoomsFromDisk(string filePath)
+    {
+        if (!System.IO.File.Exists(filePath))
+        {
+            Debug.LogError($"[RoomManager] rooms.json introuvable : {filePath}");
+            yield break;
+        }
+
+        string json = System.IO.File.ReadAllText(filePath);
+        yield return null; // defer one frame so Start() finishes first
+        ParseAndApply(json);
+    }
+#endif
+
+    IEnumerator LoadRoomsFromWeb(string url)
     {
         using UnityWebRequest request = UnityWebRequest.Get(url);
         yield return request.SendWebRequest();
 
         if (request.result != UnityWebRequest.Result.Success)
         {
-            Debug.LogError($"Erreur chargement salles : {request.error}");
+            Debug.LogError($"[RoomManager] Erreur réseau : {request.error} ({url})");
             yield break;
         }
 
-        RoomJsonRoot root = JsonConvert.DeserializeObject<RoomJsonRoot>(request.downloadHandler.text);
+        ParseAndApply(request.downloadHandler.text);
+    }
+
+    void ParseAndApply(string json)
+    {
+        RoomJsonRoot root = JsonConvert.DeserializeObject<RoomJsonRoot>(json);
 
         if (root == null || root.rooms == null)
         {
-            Debug.LogError("JSON invalide ou vide !");
-            yield break;
+            Debug.LogError("[RoomManager] JSON invalide ou vide !");
+            return;
         }
 
         rooms.Clear();
@@ -64,10 +98,19 @@ public class RoomManager : MonoBehaviour
             room.floor    = data.floor;
             room.category = data.category;
             room.status   = "unknown";
+
+            // Generate mock event data (only when not using the real API)
+            if (useLocalFallback)
+                MockRoomDataGenerator.Populate(room);
+
             rooms.Add(room);
         }
 
         Debug.Log($"{rooms.Count} salles chargées !");
+
+        // Send full rooms list to React
+        WebBridge.SendRooms(SerializeRooms());
+
         OnRoomsLoaded?.Invoke();
 
         InvokeRepeating(nameof(RefreshAllRooms), refreshInterval, refreshInterval);
@@ -96,20 +139,81 @@ public class RoomManager : MonoBehaviour
         if (data == null) yield break;
 
         room.status = data.status ?? "unknown";
+
+        // Map event data from API when available
+        if (data.currentEvent != null) room.currentEvent = data.currentEvent;
+        if (data.nextEvent    != null) room.nextEvent    = data.nextEvent;
+        if (data.scheduleToday != null && data.scheduleToday.Count > 0)
+            room.scheduleToday = data.scheduleToday;
+
         OnRoomUpdated?.Invoke(room);
         Debug.Log($"Salle {room.name} mise à jour : {room.status}");
     }
 
     public void ForceRefresh()
     {
+#if !UNITY_WEBGL || UNITY_EDITOR
+        if (string.IsNullOrEmpty(_streamingAssetsUrl))
+        {
+            StartCoroutine(LoadRoomsFromDisk(
+                System.IO.Path.Combine(Application.streamingAssetsPath, "rooms.json")));
+            return;
+        }
+#endif
         string url = useLocalFallback
             ? _streamingAssetsUrl + "/rooms.json"
             : apiBaseUrl + "/rooms";
-        StartCoroutine(LoadRooms(url));
+        StartCoroutine(LoadRoomsFromWeb(url));
     }
 
     public RoomData GetRoom(string id)      => rooms.Find(r => r.id == id);
     public RoomData GetRoomByName(string n) => rooms.Find(r => r.name == n);
+
+    // ----------------------------------------------------------------- Serialization
+
+    public string SerializeRooms()
+    {
+        var items = new System.Collections.Generic.List<RoomJsonPayload>();
+        foreach (var r in rooms)
+            items.Add(RoomJsonPayload.From(r));
+
+        return JsonConvert.SerializeObject(new { rooms = items });
+    }
+
+    public static string SerializeRoom(RoomData r)
+        => JsonConvert.SerializeObject(RoomJsonPayload.From(r));
+}
+
+// DTO used when sending data back to React (includes mock event data)
+[System.Serializable]
+public class RoomJsonPayload
+{
+    public string id;
+    public string name;
+    public string type;
+    public int    capacity;
+    public string building;
+    public string floor;
+    public string category;
+    public string status;
+    public EventData currentEvent;
+    public EventData nextEvent;
+    public System.Collections.Generic.List<EventData> scheduleToday;
+
+    public static RoomJsonPayload From(RoomData r) => new RoomJsonPayload
+    {
+        id            = r.id,
+        name          = r.name,
+        type          = r.type,
+        capacity      = r.capacity,
+        building      = r.building,
+        floor         = r.floor,
+        category      = r.category,
+        status        = r.status,
+        currentEvent  = r.currentEvent,
+        nextEvent     = r.nextEvent,
+        scheduleToday = r.scheduleToday
+    };
 }
 
 [System.Serializable]
@@ -134,4 +238,8 @@ public class RoomJsonItem
     public string status;
     public List<string> features;
     public string generatedResourceName;
+    // Event fields — populated by real API, null when using local fallback
+    public EventData currentEvent;
+    public EventData nextEvent;
+    public List<EventData> scheduleToday;
 }
