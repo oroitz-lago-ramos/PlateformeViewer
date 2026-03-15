@@ -42,7 +42,6 @@ public static class MockRoomDataGenerator
         bool isOpenSpace = room.category == "OTHER";
         string[] titles = isOpenSpace ? OpenSpaceTitles : ConferenceTitles;
 
-        // Decide which slots have events (always at least 2, openspace always full)
         var schedule = new List<EventData>();
         foreach (var slot in Slots)
         {

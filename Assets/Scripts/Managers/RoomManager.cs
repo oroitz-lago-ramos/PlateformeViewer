@@ -23,6 +23,9 @@ public class RoomManager : MonoBehaviour
 
     private string _streamingAssetsUrl = "";
 
+    public static readonly Dictionary<string, RoomData> RoomsByName = new();
+
+
     void Start()
     {
 #if !UNITY_WEBGL || UNITY_EDITOR
@@ -87,6 +90,8 @@ public class RoomManager : MonoBehaviour
         }
 
         rooms.Clear();
+        RoomsByName.Clear();
+
         foreach (var data in root.rooms)
         {
             RoomData room = ScriptableObject.CreateInstance<RoomData>();
@@ -104,6 +109,7 @@ public class RoomManager : MonoBehaviour
                 MockRoomDataGenerator.Populate(room);
 
             rooms.Add(room);
+            RoomsByName[room.name] = room;
         }
 
         Debug.Log($"{rooms.Count} salles chargées !");
