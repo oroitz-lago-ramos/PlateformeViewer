@@ -34,8 +34,32 @@ export function useRoomData(): UseRoomDataReturn {
      * Unity only provides today's schedule (offset 0); other days return empty.
      */
     const getSchedule = useCallback((roomId: string, dayOffset: number): RoomEvent[] => {
-        if (dayOffset !== 0) return [];
-        return rooms.find(r => r.id === roomId)?.scheduleToday ?? [];
+        const room = rooms.find(r => r.id === roomId);
+        if (!room) return [];
+
+        const target = new Date();
+        target.setDate(target.getDate() + dayOffset);
+        const targetDate = target.toLocaleDateString('en-CA'); // "YYYY-MM-DD"
+
+        const isOnDate = (e: RoomEvent) => {
+            if (!e.date) return true;
+            // Multi-day: endDate is exclusive (e.g. event ends at midnight = start of endDate)
+            if (e.endDate && e.endDate > e.date)
+                return e.date <= targetDate && targetDate < e.endDate;
+            return e.date === targetDate;
+        };
+
+        // Use scheduleToday if available
+        if (room.scheduleToday.length > 0)
+            return room.scheduleToday.filter(isOnDate);
+
+        // API only provides current_event / next_event
+        const events: RoomEvent[] = [];
+        if (room.currentEvent && isOnDate(room.currentEvent))
+            events.push({ ...room.currentEvent, id: 'current' });
+        if (room.nextEvent && isOnDate(room.nextEvent))
+            events.push({ ...room.nextEvent, id: 'next' });
+        return events;
     }, [rooms]);
 
     /** Upserts a single room (called when Unity sends a room-selected event with fresh data). */

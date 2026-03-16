@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Networking;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using Newtonsoft.Json;
@@ -7,7 +8,7 @@ using Newtonsoft.Json;
 public class RoomManager : MonoBehaviour
 {
     [Header("Configuration")]
-    public string apiBaseUrl = "https://localhost/api/v1";
+    public string apiBaseUrl = "http://localhost:8080/api/v1";
     public bool useLocalFallback = true;
     public float refreshInterval = 30f;
 
@@ -22,18 +23,60 @@ public class RoomManager : MonoBehaviour
     public static event System.Action<RoomData> OnRoomUpdated;
 
     private string _streamingAssetsUrl = "";
+    private string _buildingName = "";
 
     public static readonly Dictionary<string, RoomData> RoomsByName = new();
 
 
+    void Awake()
+    {
+        SceneLoader.OnBuildingLoaded += OnBuildingSceneLoaded;
+    }
+
+    void OnDestroy()
+    {
+        SceneLoader.OnBuildingLoaded -= OnBuildingSceneLoaded;
+    }
+
+    void OnBuildingSceneLoaded()
+    {
+        BuildingIdentifier identifier = FindObjectOfType<BuildingIdentifier>();
+        if (identifier != null)
+            _buildingName = identifier.BuildingName;
+        else
+            Debug.LogWarning("[RoomManager] No BuildingIdentifier found in loaded scene.");
+
+        Debug.Log($"[RoomManager] Building detected: '{_buildingName}'");
+
+        // Re-fetch rooms whenever a building scene is loaded or swapped
+        if (!useLocalFallback)
+        {
+            if (!string.IsNullOrEmpty(_streamingAssetsUrl))
+                StartCoroutine(LoadRoomsFromWeb(BuildApiUrl()));
+#if !UNITY_WEBGL || UNITY_EDITOR
+            else if (autoLoadOnStart)
+                StartCoroutine(LoadRoomsFromDisk(
+                    System.IO.Path.Combine(Application.streamingAssetsPath, "rooms.json")));
+#endif
+        }
+    }
+
     void Start()
     {
 #if !UNITY_WEBGL || UNITY_EDITOR
-        // Editor / standalone: load directly from disk — no need to wait for React
-        if (autoLoadOnStart)
+        // Editor / standalone with local fallback: load directly from disk
+        if (autoLoadOnStart && useLocalFallback)
             StartCoroutine(LoadRoomsFromDisk(
                 System.IO.Path.Combine(Application.streamingAssetsPath, "rooms.json")));
 #endif
+    }
+
+    private string BuildApiUrl()
+    {
+        string url = apiBaseUrl + "/rooms";
+        if (!string.IsNullOrEmpty(_buildingName))
+            url += "?building=" + UnityEngine.Networking.UnityWebRequest.EscapeURL(_buildingName);
+        return url;
     }
 
     // Called by React via sendMessage once the WebGL build is mounted
@@ -42,7 +85,7 @@ public class RoomManager : MonoBehaviour
         _streamingAssetsUrl = path.TrimEnd('/');
         string url = useLocalFallback
             ? _streamingAssetsUrl + "/rooms.json"
-            : apiBaseUrl + "/rooms";
+            : BuildApiUrl();
 
         Debug.Log("[RoomManager] URL : " + url);
         StartCoroutine(LoadRoomsFromWeb(url));
@@ -95,14 +138,19 @@ public class RoomManager : MonoBehaviour
         foreach (var data in root.rooms)
         {
             RoomData room = ScriptableObject.CreateInstance<RoomData>();
-            room.id       = data.id;
+            room.id       = !string.IsNullOrEmpty(data.id) ? data.id : data.code;
             room.name     = data.name;
             room.capacity = data.capacity;
             room.type     = data.type;
             room.building = data.building;
-            room.floor    = data.floor;
+            room.floor    = data.floor == 0 ? "RDC" : data.floor.ToString();
             room.category = data.category;
-            room.status   = "unknown";
+            room.status   = data.status ?? "unknown";
+
+            // Keep ISO timestamps intact — React handles formatting and date filtering
+            if (data.currentEvent  != null) room.currentEvent  = data.currentEvent;
+            if (data.nextEvent     != null) room.nextEvent     = data.nextEvent;
+            if (data.scheduleToday != null) room.scheduleToday = data.scheduleToday;
 
             // Generate mock event data (only when not using the real API)
             if (useLocalFallback)
@@ -168,7 +216,7 @@ public class RoomManager : MonoBehaviour
 #endif
         string url = useLocalFallback
             ? _streamingAssetsUrl + "/rooms.json"
-            : apiBaseUrl + "/rooms";
+            : BuildApiUrl();
         StartCoroutine(LoadRoomsFromWeb(url));
     }
 
@@ -190,7 +238,7 @@ public class RoomManager : MonoBehaviour
         => JsonConvert.SerializeObject(RoomJsonPayload.From(r));
 }
 
-// DTO used when sending data back to React (includes mock event data)
+// DTO used when sending data back to React
 [System.Serializable]
 public class RoomJsonPayload
 {
@@ -234,18 +282,19 @@ public class RoomJsonRoot
 public class RoomJsonItem
 {
     public string id;
+    public string code;        
     public string name;
-    public string email;
+    [JsonProperty("resource_email")] public string email;
     public string type;
     public int capacity;
     public string building;
-    public string floor;
+    public int floor;          
     public string category;
     public string status;
     public List<string> features;
     public string generatedResourceName;
-    // Event fields — populated by real API, null when using local fallback
-    public EventData currentEvent;
-    public EventData nextEvent;
-    public List<EventData> scheduleToday;
+    // Event fields — API uses snake_case keys
+    [JsonProperty("current_event")]  public EventData currentEvent;
+    [JsonProperty("next_event")]     public EventData nextEvent;
+    [JsonProperty("schedule_today")] public List<EventData> scheduleToday;
 }

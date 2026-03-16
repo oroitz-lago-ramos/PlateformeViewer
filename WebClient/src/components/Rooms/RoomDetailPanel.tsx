@@ -35,6 +35,22 @@ const MONTHS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juill
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function eventTitle(title: string | undefined): string {
+    return (!title || title === 'Unknown event') ? 'Données inconnues' : title;
+}
+
+function nextEventSuffix(event: { startTime: string; date?: string }): string {
+    const isAllDay = event.startTime === 'Journée entière';
+    const today = new Date().toLocaleDateString('en-CA');
+    const datePart = event.date && event.date !== today
+        ? (() => {
+            const d = new Date(event.date);
+            return ` le ${d.getDate()} ${MONTHS_FR[d.getMonth()]}`;
+        })()
+        : '';
+    return isAllDay ? `${datePart} — Journée entière` : `${datePart} à ${event.startTime}`;
+}
+
 function formatDate(dayOffset: number): string {
     const d = new Date();
     d.setDate(d.getDate() + dayOffset);
@@ -43,10 +59,12 @@ function formatDate(dayOffset: number): string {
 }
 
 function isNowBetween(startTime: string, endTime: string): boolean {
+    if (startTime === 'Journée entière') return true;
     const now = new Date();
     const nowMins = now.getHours() * 60 + now.getMinutes();
     const [sh, sm] = startTime.split(':').map(Number);
     const [eh, em] = endTime.split(':').map(Number);
+    if (isNaN(sh) || isNaN(eh)) return false;
     return nowMins >= sh * 60 + sm && nowMins < eh * 60 + em;
 }
 
@@ -254,11 +272,13 @@ export function RoomDetailPanel({ room, schedule, dayOffset, onDayChange, onClos
                         }}>
                             <span style={{ color: '#E74A34', fontWeight: 600 }}>En cours · </span>
                             <span style={{ color: 'rgba(255,255,255,0.7)' }}>
-                                {room.currentEvent.title}
+                                {eventTitle(room.currentEvent.title)}
                             </span>
-                            <span style={{ color: 'rgba(255,255,255,0.35)' }}>
-                                {' '}— jusqu'à {room.currentEvent.endTime}
-                            </span>
+                            {room.currentEvent.endTime && room.currentEvent.endTime !== 'Journée entière' && (
+                                <span style={{ color: 'rgba(255,255,255,0.35)' }}>
+                                    {' '}— jusqu'à {room.currentEvent.endTime}
+                                </span>
+                            )}
                         </div>
                     )}
                     {isToday && !room.currentEvent && room.nextEvent && (
@@ -272,10 +292,10 @@ export function RoomDetailPanel({ room, schedule, dayOffset, onDayChange, onClos
                         }}>
                             <span style={{ color: '#00988F', fontWeight: 600 }}>Prochain · </span>
                             <span style={{ color: 'rgba(255,255,255,0.7)' }}>
-                                {room.nextEvent.title}
+                                {eventTitle(room.nextEvent.title)}
                             </span>
                             <span style={{ color: 'rgba(255,255,255,0.35)' }}>
-                                {' '}à {room.nextEvent.startTime}
+                                {nextEventSuffix(room.nextEvent)}
                             </span>
                         </div>
                     )}
@@ -356,9 +376,9 @@ export function RoomDetailPanel({ room, schedule, dayOffset, onDayChange, onClos
                         <EmptySchedule />
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                            {schedule.map(event => (
+                            {schedule.map((event, i) => (
                                 <EventItem
-                                    key={event.id}
+                                    key={event.id ?? `${event.startTime}-${i}`}
                                     event={event}
                                     isCurrent={isToday && isNowBetween(event.startTime, event.endTime)}
                                 />
@@ -448,7 +468,7 @@ function EventItem({ event, isCurrent }: { event: RoomEvent; isCurrent: boolean 
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                 }}>
-                    {event.title}
+                    {eventTitle(event.title)}
                 </div>
                 {event.organizer && (
                     <div style={{
@@ -481,9 +501,12 @@ function EventItem({ event, isCurrent }: { event: RoomEvent; isCurrent: boolean 
 }
 
 function durationLabel(start: string, end: string): string {
+    if (start === 'Journée entière' || !end) return '';
     const [sh, sm] = start.split(':').map(Number);
     const [eh, em] = end.split(':').map(Number);
+    if (isNaN(sh) || isNaN(eh)) return '';
     const mins = (eh * 60 + em) - (sh * 60 + sm);
+    if (mins <= 0) return '';
     if (mins < 60) return `${mins}min`;
     if (mins % 60 === 0) return `${mins / 60}h`;
     return `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, '0')}`;

@@ -382,7 +382,7 @@ export function RoomSidebar({ rooms, selectedRoomId, onSelectRoom }: Props) {
                                         const isSelected = room.id === selectedRoomId;
                                         return (
                                             <RoomListItem
-                                                key={room.id}
+                                                key={room.id ?? room.name}
                                                 room={room}
                                                 isSelected={isSelected}
                                                 onClick={() => onSelectRoom(room.id)}

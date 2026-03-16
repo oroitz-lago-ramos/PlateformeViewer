@@ -599,8 +599,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 513879acb3845ad4e9c5b16a2d2d3735, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RoomManager
-  apiBaseUrl: https://localhost/api/v1
-  useLocalFallback: 1
+  apiBaseUrl: http://localhost:8080/api/v1
+  useLocalFallback: 0
   refreshInterval: 30
   autoLoadOnStart: 1
   rooms: []
