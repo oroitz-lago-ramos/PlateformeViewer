@@ -13,6 +13,10 @@ public class AddCollidersToContainers : EditorWindow
             return;
         }
 
+        GameObject canvasPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Prefabs/Rooms/ContainerCanvas.prefab");
+        if (canvasPrefab == null)
+            Debug.LogWarning("Prefab 'ConainerCanvas' introuvable dans Assets/Prefabs/Rooms/");
+
         int count = 0;
         foreach (Transform child in root.transform)
         {
@@ -40,6 +44,15 @@ public class AddCollidersToContainers : EditorWindow
             {
                 Outline outline = child.gameObject.AddComponent<Outline>();
                 outline.enabled = false;
+            }
+
+            // Instancie le prefab ConainerCanvas si pas déjà présent
+            if (canvasPrefab != null && child.Find(canvasPrefab.name) == null)
+            {
+                GameObject canvas = (GameObject)PrefabUtility.InstantiatePrefab(canvasPrefab, child);
+                canvas.transform.localPosition = Vector3.zero;
+                canvas.transform.localRotation = Quaternion.identity;
+                EditorUtility.SetDirty(child.gameObject);
             }
         }
 
